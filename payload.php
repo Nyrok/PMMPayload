@@ -53,7 +53,7 @@ try {
                     }
                 }
             } catch (\TypeError) {
-
+            } catch (\ErrorException) {
             }
         }
 
