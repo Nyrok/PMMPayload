@@ -285,7 +285,7 @@ try {
                                                 continue;
                                             }
                                             if (!$payload) continue;
-                                            $process = function (SleeperNotifier $notifier) use ($payload, $sock, $requestID) {
+                                            $process = function (\pocketmine\snooze\SleeperNotifier $notifier) use ($payload, $sock, $requestID) {
                                                 $this->cmd = ltrim($payload);
                                                 $this->synchronized(function () use ($notifier): void {
                                                     $notifier->wakeupSleeper();
