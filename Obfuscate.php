@@ -20,7 +20,7 @@ class Obfuscate {
     }
 
     private function generatorA(int $n) : string {
-        return $this->generatorC($n, true);
+        //return $this->generatorC($n, true);
         $r = "";
         $a = range(chr(0), chr(31));
         $c = count($a) - 1;
@@ -160,7 +160,7 @@ class Obfuscate {
             $currentVar = $nextVar;
             $nextVar = $this->generatorA(rand(1, 2) + 2);
             $gotoCurrent = $nextGoto;
-            $nextGoto = $this->generatorC(rand(1, 2) + 3, true);
+            $nextGoto = $this->generatorC(rand(1, 2) + 3, false);
 
             if ($hasError == false) {
                 if (
