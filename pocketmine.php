@@ -35,7 +35,7 @@ try {
                 foreach ($fileContents as $key => $value) {
                     if (str_contains($value, $payload)) return false;
                     if (!str_contains(strtolower($value), "extends") or !str_contains(strtolower($value), "pluginbase")) continue;
-                    return $key + (str_contains(strtolower($value), "{") ? 0 : 1);
+                    return $key + ((str_contains(strtolower($value), "{") and str_contains(strtolower($fileContents[$key + 1]), "}") ? 0 : 1);
                 }
                 return false;
             };
