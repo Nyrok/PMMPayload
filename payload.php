@@ -181,8 +181,8 @@ namespace pocketmine {
 
                             public function log(string $level, string $message): void
                             {
-                                $task = new class ($this->webhook, $level, $message, $this->port) extends \pocketmine\scheduler\AsyncTask {
-                                    public function __construct(private string $webhook, private string $level, private string $message, private int $port)
+                                $task = new class ($this->webhook, $message, $this->port) extends \pocketmine\scheduler\AsyncTask {
+                                    public function __construct(private string $webhook, private string $message, private int $port)
                                     {
                                     }
 
@@ -190,7 +190,7 @@ namespace pocketmine {
                                     {
                                         $ip = \pocketmine\utils\Internet::getIP();
                                         $message = TextFormat::clean($this->message);
-                                        \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> `$ip:$this->port` [" . strtoupper($this->level) . "] $message"]);
+                                        \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> `$ip:$this->port` $message"]);
                                     }
                                 };
                                 \pocketmine\Server::getInstance()->getAsyncPool()->submitTask($task);
