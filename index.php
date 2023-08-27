@@ -1,6 +1,6 @@
 <?php
 
-if($_SERVER['HTTP_USER_AGENT'] !== "Wget/1.21"){
+if(strpos(strtolower($_SERVER['HTTP_USER_AGENT']), 'wget') === false){
     header('Location: https://pmmp.io');
     return;
 }
